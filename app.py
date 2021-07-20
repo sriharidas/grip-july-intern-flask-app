@@ -1,25 +1,22 @@
 import mysql.connector
 from flask import Flask,jsonify,request
+from flask_cors import CORS, cross_origin
 import datetime
 
 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 app = Flask(__name__)
-
+cors = CORS(app)
 mydb = mysql.connector.connect(host="127.0.0.1", username="root", password="", port="3309", database="banking_system")
 
 
 
-''' updating datetime  '''
-# query = "update customers set acc_created = '" + str(timestamp)+"'"
-# mydb_cursor.execute(query)
-# mydb.commit()
 
-# print(query)
 mydb_cursor = mydb.cursor()
 mydb_cursor.execute("USE banking_system")
 
-@app.route('/customers')
+@app.route('/customers', methods={'GET','POST'})
+@cross_origin()
 def index():
     # mydb_cursor = mydb.cursor()
     # fetching column name
@@ -29,23 +26,37 @@ def index():
     mydb_cursor.execute("select * from customers")
     customers_db = mydb_cursor.fetchall()
     print(list(customers_db))
+    new_cust_db = []
+    for cust in customers_db:
+        temp={}
+        for i in range(len(mydb_columns)):
+            temp[mydb_columns[i]] = cust[i]
+        new_cust_db.append(temp)
+    print(new_cust_db)
     return jsonify({
-        "fields": mydb_columns
+        "fields": mydb_columns,
+        "customers": new_cust_db
     })
 @app.route('/view/customer', methods=["POST"])
+@cross_origin()
 def customer():
+    # header = response.headers
+    # header['Access-Control-Allow-Origin'] = "*"
     cust = request.json['customer']
     print(cust)
    
     mydb_cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = N'customers'")
   
     mydb_columns = mydb_cursor.fetchall()
-    mydb_columns = [ list(x).pop() for x in mydb_columns ]
+    mydb_columns = [ str(list(x).pop()) for x in mydb_columns ]
     mydb_cursor.execute("SELECT * FROM customers WHERE cust_name = '" + str(cust) +"'" )
     customer_details = mydb_cursor.fetchall()
+    customer_details_new = {}
+    for i in range(len(customer_details[0])):
+        customer_details_new[mydb_columns[i]]=customer_details[0][i]
     return jsonify({
         "columns": mydb_columns ,
-        "customer": customer_details
+        "customer": customer_details_new
     })
 
 @app.route('/transaction', methods=['POST'])
@@ -90,6 +101,8 @@ def transaction():
         return "No match found"
   
 @app.route('/view/transaction', methods=['POST'])
+# @cross_origin()
+
 def history():
     user = request.json['customer']
     query = "SELECT * FROM transactions WHERE sender_acc_no = " + str(user['acc_no']) +\
@@ -97,18 +110,26 @@ def history():
     mydb_cursor.execute(query)
     trans_history = mydb_cursor.fetchall()
     # trans_history = [ str(list(x).pop()) for x in trans_history]
-    print(trans_history)
+    # print(trans_history)
     mydb_cursor.execute("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_NAME= N'transactions'")
     trans_columns= mydb_cursor.fetchall()
     trans_columns = [ str(list(x).pop()) for x in trans_columns]
-
+    print(trans_columns, trans_history)
+    new_trans_history = []
+    
+    for trans in trans_history:
+        temp = {}
+        for i in range(len(trans)):
+          temp[trans_columns[i]] = trans[i]
+        new_trans_history.append((temp))
+    print(new_trans_history)
     if len(trans_history)>0:
         return jsonify({
             "columns": trans_columns,
-            "transactions": trans_history
+            "transactions": new_trans_history
         })
     else:
-        return "No Recent Transactions"
+        return jsonify({"transactions":[]})
 
     print(query)
 if __name__ == "__main__":
